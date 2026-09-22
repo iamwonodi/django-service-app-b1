@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+/*
+ * Plugins. Tailwind v4 loads them from CSS rather than from tailwind.config.js.
+ * aspect-ratio is gone: v4 has aspect-* utilities built in.
+ */
+@plugin "@tailwindcss/forms";
+@plugin "@tailwindcss/typography";
+
+/*
+ * Where Tailwind looks for class names, relative to this file. v4 detects the
+ * files beside the build automatically; the templates live elsewhere in the
+ * project, so they are named here. This keeps the scope the v3 configuration
+ * had: every app's templates/ directory.
+ *
+ * If a class you used is missing from the built CSS, the file it is in is not
+ * matched here.
+ */
+@source "../../../**/templates/**/*.html";

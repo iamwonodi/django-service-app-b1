@@ -1,0 +1,26 @@
+# Runtime dependencies only -- this is what the production image installs.
+# Development tooling (live reload, notebooks, ...) belongs in requirements-dev.txt.
+# Everything is pinned so a rebuilt image is the same image.
+
+# 5.2 is the long-term support release: security fixes until April 2028. The
+# blueprint tracks LTS releases rather than the newest feature release, so the
+# services built from it are not chasing a framework upgrade every eight months.
+Django==5.2.17
+asgiref==3.12.1
+sqlparse==0.6.0
+
+gunicorn==26.2.0
+packaging==26.3
+
+# PostgreSQL driver (the database engine the platform runs today). A different
+# engine needs its own driver here, e.g. mysqlclient for MySQL.
+#
+# psycopg-binary ships compiled wheels per Python version, so the pin must be a
+# release that has one for every Python this runs on. 3.3.6 has wheels for 3.13
+# and 3.14 on Windows and Linux.
+psycopg==3.3.6
+psycopg-binary==3.3.6
+
+# {% tailwind_css %} in the templates. The CSS itself is compiled at image build
+# time by the Node stage of the Dockerfile.
+django-tailwind==4.5.0

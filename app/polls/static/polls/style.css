@@ -1,0 +1,21 @@
+/*
+ * Polls-specific styles that Tailwind's utility classes do not cover.
+ *
+ * Layout and colour come from Tailwind (see theme/static_src). This file only
+ * adds behaviour a utility cannot express: visible keyboard focus and respect
+ * for reduced-motion settings.
+ */
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #a78bfa; /* purple-400 */
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

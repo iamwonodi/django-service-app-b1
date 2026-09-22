@@ -1,0 +1,63 @@
+name: Ensure Image
+description: >
+  Makes sure the release tag's image is in the environment's ECR repository:
+  checks whether it is already there and, if not, builds it from the checked-out
+  tag and pushes it. ECR tags are immutable, so an existing tag is never rebuilt;
+  that makes a rerun, a backfill and a promotion safe.
+
+inputs:
+  repository-name:
+    description: ECR repository name, for example auth/web
+    required: true
+  registry-host:
+    description: ECR registry host, for example 123456789012.dkr.ecr.eu-west-1.amazonaws.com
+    required: true
+  tag:
+    description: The release tag, for example v1.2.0
+    required: true
+  region:
+    description: AWS Region
+    required: true
+  context:
+    description: Docker build context (the folder holding the Dockerfile)
+    required: false
+    default: app
+
+outputs:
+  built:
+    description: "true if the image was built and pushed by this step, false if it was already there"
+    value: ${{ steps.check.outputs.exists == 'true' && 'false' || 'true' }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check Whether The Image Exists
+      id: check
+      shell: bash
+      run: |
+        bash scripts/ci/check-image-exists.sh \
+          "${{ inputs.repository-name }}" \
+          "${{ inputs.tag }}" \
+          "${{ inputs.region }}"
+
+    - name: Log In To ECR
+      if: steps.check.outputs.exists != 'true'
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Set Up Buildx
+      if: steps.check.outputs.exists != 'true'
+      uses: docker/setup-buildx-action@v4
+
+    - name: Build And Push
+      if: steps.check.outputs.exists != 'true'
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ inputs.context }}
+        push: true
+        tags: ${{ inputs.registry-host }}/${{ inputs.repository-name }}:${{ inputs.tag }}
+        labels: |
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.version=${{ inputs.tag }}
+        provenance: false
+        cache-from: type=gha,scope=${{ inputs.repository-name }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.repository-name }}

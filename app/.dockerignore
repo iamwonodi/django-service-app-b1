@@ -1,0 +1,40 @@
+# Keeps the build context small and, more importantly, keeps files that must never
+# be baked into an image out of it.
+
+# Secrets and per-environment configuration. .env is a template uploaded to the
+# deploy bucket by the pipeline; it does not belong in the image.
+.env
+.env.*
+**/.env
+
+# Version control and editor
+.git
+.gitignore
+.vscode
+.idea
+
+# Build tooling and other deployment files
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Dependencies rebuilt inside the image
+**/node_modules
+.venv
+venv
+requirements-dev.txt
+
+# Python
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+db.sqlite3
+*.log
+
+# Build output regenerated in the image (the stylesheet by the Tailwind stage,
+# the static files by collectstatic). A stale local copy must not leak in.
+staticfiles
+theme/static
+
+# Not needed at runtime
+app/tests

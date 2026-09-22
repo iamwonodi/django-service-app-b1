@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Fake docker. FAKE_STATIC_DIR is copied by "docker cp <id>:/app/staticfiles <dest>".
+[[ -n "${FAKE_LOG:-}" ]] && printf 'docker %s\n' "$*" >> "${FAKE_LOG}"
+case "$1" in
+  create) echo "fake-container-id" ;;
+  cp)
+    if [[ -n "${FAKE_STATIC_DIR:-}" && -d "${FAKE_STATIC_DIR}" ]]; then mkdir -p "$3"; cp -r "${FAKE_STATIC_DIR}/." "$3/"; exit 0; fi
+    echo "Error: No such container:path" >&2; exit 1 ;;
+esac
+exit 0

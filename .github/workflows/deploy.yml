@@ -1,0 +1,220 @@
+name: Deploy
+
+# Deploys a release tag to an environment: image ensured, static files uploaded,
+# the compose file and .env published, the hosts redeployed, and the result awaited.
+#
+# WHEN IT RUNS
+#
+#   after Build And Push   development only, for the tag that was just built. A
+#                          release reaches development automatically.
+#   push to main           development only, when app/docker-compose.yml or app/.env
+#                          changed: the newest release is redeployed with the new
+#                          configuration.
+#   workflow_dispatch      any enabled environment, for ONE tag you choose, with a
+#                          typed confirmation. Above the lowest environment the tag
+#                          must already have been deployed successfully to the
+#                          environment below it (staging accepts only what ran in
+#                          development, production only what ran in staging).
+#
+# The tag's own commit is checked out, so the compose file and .env deployed are the
+# ones the image was released with.
+#
+# ORDER inside a deploy: static files first (a new page must never name a file that
+# is not uploaded yet), then the compose file and .env, then the redeploy.
+#
+# Everything the deploy needs is read from /<project>/services/<service>/config, which
+# the service's infrastructure repository publishes.
+
+on:
+  workflow_run:
+    workflows: ["Build And Push"]
+    types: [completed]
+
+  push:
+    branches:
+      - main
+    paths:
+      - "app/docker-compose.yml"
+      - "app/.env"
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag to deploy (for example v1.2.0)"
+        required: true
+        type: string
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      confirm:
+        description: 'Type the environment name exactly to confirm (for example "production")'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+  deployments: write
+
+jobs:
+
+  resolve:
+    name: Resolve Deploy Target
+    # A finished build only deploys if it succeeded and was started by a tag push (not
+    # by a manual backfill).
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.target.outputs.environment }}
+      tag: ${{ steps.target.outputs.tag }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate Confirmation
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SELECTION: ${{ github.event.inputs.environment }}
+          CONFIRMATION: ${{ github.event.inputs.confirm }}
+        run: bash scripts/ci/validate-confirmation.sh "${SELECTION}" "${CONFIRMATION}" "NOT-USED"
+
+      - name: Resolve Environment And Tag
+        id: target
+        env:
+          EVENT: ${{ github.event_name }}
+          BUILT_TAG: ${{ github.event.workflow_run.head_branch }}
+          REQUESTED_TAG: ${{ github.event.inputs.tag }}
+          REQUESTED_ENVIRONMENT: ${{ github.event.inputs.environment }}
+        run: |
+          if [[ "${EVENT}" == "workflow_dispatch" ]]; then
+            ENVIRONMENT="$(bash scripts/ci/resolve-environments.sh one "${REQUESTED_ENVIRONMENT}" | jq -r '.[0]')"
+            TAG_MODE=(single "${REQUESTED_TAG}")
+          else
+            ENVIRONMENT="$(bash scripts/ci/resolve-environments.sh auto | jq -r '.[0]')"
+            if [[ "${EVENT}" == "workflow_run" ]]; then TAG_MODE=(single "${BUILT_TAG}"); else TAG_MODE=(latest); fi
+          fi
+
+          # resolve-tags.sh reports through GITHUB_OUTPUT; point it at a scratch file so
+          # only the tag comes back here.
+          GITHUB_OUTPUT=/tmp/tags.out bash scripts/ci/resolve-tags.sh "${TAG_MODE[@]}"
+          TAG="$(grep '^tags=' /tmp/tags.out | cut -d= -f2- | jq -r '.[0]')"
+
+          echo "environment=${ENVIRONMENT}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "Deploying ${TAG} to ${ENVIRONMENT}."
+
+  # Runs BEFORE the environment's approval, so a reviewer is never asked to approve a
+  # deploy that the promotion rule would refuse.
+  gate:
+    name: Promotion Gate
+    needs: resolve
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Check The Tag Ran In The Environment Below
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/ci/check-promotion.sh "${{ github.repository }}" "${{ needs.resolve.outputs.environment }}" "${{ needs.resolve.outputs.tag }}"
+
+  deploy:
+    name: Deploy ${{ needs.resolve.outputs.tag }} (${{ needs.resolve.outputs.environment }})
+    needs: [resolve, gate]
+    if: always() && needs.resolve.result == 'success' && (needs.gate.result == 'success' || needs.gate.result == 'skipped')
+    runs-on: ubuntu-latest
+
+    environment: ${{ needs.resolve.outputs.environment }}
+
+    # One deploy per environment at a time, queued and never cancelled: two deploys
+    # racing to publish the compose file would leave the fleet on whichever wrote last.
+    concurrency:
+      group: deploy-${{ needs.resolve.outputs.environment }}
+      cancel-in-progress: false
+
+    env:
+      TAG: ${{ needs.resolve.outputs.tag }}
+      DEPLOY_ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
+
+    steps:
+      - name: Checkout The Tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Read Deploy Settings
+        run: |
+          bash scripts/ci/check-placeholders.sh deploy.json
+          bash scripts/ci/read-deploy-settings.sh >> "${GITHUB_ENV}"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Read Service Config
+        run: bash scripts/ci/read-service-config.sh "${PROJECT_NAME}" "${SERVICE_NAME}" "${{ vars.AWS_REGION }}" "${SERVICE_TIER}" >> "${GITHUB_ENV}"
+
+      # A missing image is built here, which is what makes a promotion a single step:
+      # the tag was built for the environment below, and this environment is a
+      # separate AWS account.
+      - name: Ensure Image
+        uses: ./.github/actions/ensure-image
+        with:
+          repository-name: ${{ env.ECR_REPOSITORY_NAME }}
+          registry-host: ${{ env.ECR_REGISTRY_HOST }}
+          tag: ${{ env.TAG }}
+          region: ${{ vars.AWS_REGION }}
+
+      - name: Log In To ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Pull The Image
+        run: |
+          echo "IMAGE=${ECR_REPOSITORY_URL}:${TAG}" >> "${GITHUB_ENV}"
+          docker pull "${ECR_REPOSITORY_URL}:${TAG}"
+
+      - name: Upload Static Files
+        run: bash scripts/ci/sync-static.sh "${IMAGE}" "${STATIC_BUCKET}" "${STATIC_PREFIX}" "${{ vars.AWS_REGION }}"
+
+      - name: Render Deploy Files
+        run: bash scripts/ci/render-deploy-files.sh app /tmp/rendered
+
+      - name: Publish Deploy Files
+        run: bash scripts/ci/publish-deploy-files.sh /tmp/rendered "${DEPLOY_BUCKET}" "${DEPLOY_PREFIX}" "${{ vars.AWS_REGION }}"
+
+      - name: Redeploy And Wait
+        # The config says which hosts: the tier's on a shared fleet, the service's
+        # own where it has dedicated hosts.
+        run: bash scripts/ci/redeploy.sh "${UPDATE_DOCUMENT}" "${PROJECT_NAME}" "${TARGET_SERVICE_TAG}" "${{ vars.AWS_REGION }}" "${TAG}"
+
+      # Recorded only now that every host reported Success. This is what lets the next
+      # environment accept the tag.
+      - name: Record The Deployment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/ci/record-deployment.sh "${{ github.repository }}" "${DEPLOY_ENVIRONMENT}" "${TAG}" \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "Deployed \`${TAG}\` to **${DEPLOY_ENVIRONMENT}**."
+            echo "Image: \`${IMAGE}\`"
+            echo "Served at: https://${SERVICE_DOMAIN}"
+          } >> "${GITHUB_STEP_SUMMARY}"

@@ -1,0 +1,69 @@
+# ==============================================================================
+# THE SERVICE'S FLEET DEPLOYMENT
+#
+# Published by the pipeline to s3://<deploy bucket>/<tier>/<service>/ and run by
+# the fleet's deploy script as its own Compose project. The pipeline substitutes:
+#
+#   __IMAGE__   the full image reference, including its tag
+#   __PORT__    the host port allocated to this service in the port registry
+#
+# Two things here are easy to get wrong and are deliberate:
+#
+#   env_file: and --env-file are DIFFERENT. The deploy script passes --env-file so
+#   ${VAR} can be interpolated into this file, but that puts nothing inside the
+#   container. env_file: is what injects the variables, and it must point at the
+#   secret-resolved scratch copy (.resolved/.env), never at the permanent .env,
+#   which holds only __FROM_SECRET__ references.
+#
+#   No container_name: on a shared host that is a global namespace and would
+#   collide with a co-tenant that chose the same name. The deploy script runs each
+#   service as its own project, whose automatic names are already unique.
+# ==============================================================================
+
+services:
+
+  web:
+    image: __IMAGE__
+    restart: unless-stopped
+
+    # The host port is allocated per service; the container always listens on 8000.
+    # The load balancer's target group targets the host port.
+    ports:
+      - "__PORT__:8000"
+
+    env_file:
+      - .resolved/.env
+
+    # The application writes nothing to its own filesystem, so it does not need to
+    # be able to. /tmp stays writable for anything that insists on a scratch file.
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # Bounded, so a noisy service cannot fill the host's disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Time for in-flight requests to finish when the container is replaced.
+    stop_grace_period: 30s
+
+    # The container's own check. It uses 127.0.0.1, which the load balancer's does
+    # not (that one arrives by IP); both are answered by HealthCheckMiddleware.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

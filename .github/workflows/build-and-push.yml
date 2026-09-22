@@ -1,0 +1,151 @@
+name: Build And Push
+
+# Builds the image for a release and pushes it to the environment's ECR repository.
+#
+#   push a v* tag      builds that tag for the LOWEST enabled environment
+#                      (development). Deploy runs afterwards.
+#   workflow_dispatch  builds chosen tags for one environment, or all of them:
+#                      a backfill, or an image ahead of a promotion. A deploy to
+#                      an environment builds a missing image itself, so this is
+#                      rarely needed by hand.
+#
+# Where the image goes is NOT read from Terraform: the service's infrastructure
+# repository publishes it in /<project>/services/<service>/config.
+#
+# Each environment is its own AWS account, so an environment gets its own build of
+# the tag. ECR tags are immutable, and a build is skipped when the tag is already
+# there. (A base-image update between two builds could make two environments differ;
+# copying one image across accounts needs ECR replication, which core does not set
+# up yet.)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Tag(s) to build: one tag, a comma-separated list, or "all" for every release tag'
+        required: true
+        type: string
+        default: "all"
+      environment:
+        description: "Environment to build and push to"
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+          - all
+      confirm:
+        description: >
+          Type the environment name exactly to confirm (for example "production"),
+          or "BUILD-ALL-ENVIRONMENTS" if you selected "all".
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+
+  resolve:
+    name: Resolve Build Targets
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.tags.outputs.tags }}
+      environments: ${{ steps.environments.outputs.environments }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate Confirmation
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SELECTION: ${{ github.event.inputs.environment }}
+          CONFIRMATION: ${{ github.event.inputs.confirm }}
+        run: bash scripts/ci/validate-confirmation.sh "${SELECTION}" "${CONFIRMATION}" "BUILD-ALL-ENVIRONMENTS"
+
+      - name: Resolve Tags
+        id: tags
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSHED_TAG: ${{ github.ref_name }}
+          REQUESTED: ${{ github.event.inputs.tags }}
+        run: |
+          if [[ "${EVENT}" == "push" ]]; then
+            bash scripts/ci/resolve-tags.sh single "${PUSHED_TAG}"
+          else
+            bash scripts/ci/resolve-tags.sh manual "${REQUESTED}"
+          fi
+
+      - name: Resolve Environments
+        id: environments
+        env:
+          EVENT: ${{ github.event_name }}
+          SELECTION: ${{ github.event.inputs.environment }}
+        run: |
+          if [[ "${EVENT}" == "push" ]]; then
+            ENVIRONMENTS="$(bash scripts/ci/resolve-environments.sh auto)"
+          elif [[ "${SELECTION}" == "all" ]]; then
+            ENVIRONMENTS="$(bash scripts/ci/resolve-environments.sh all)"
+          else
+            ENVIRONMENTS="$(bash scripts/ci/resolve-environments.sh one "${SELECTION}")"
+          fi
+          echo "environments=${ENVIRONMENTS}" >> "${GITHUB_OUTPUT}"
+          echo "Environments: ${ENVIRONMENTS}"
+
+  build:
+    name: Build ${{ matrix.tag }} (${{ matrix.environment }})
+    needs: resolve
+    runs-on: ubuntu-latest
+
+    environment: ${{ matrix.environment }}
+
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        environment: ${{ fromJson(needs.resolve.outputs.environments) }}
+        tag: ${{ fromJson(needs.resolve.outputs.tags) }}
+
+    steps:
+      - name: Checkout Repository At Tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.tag }}
+
+      - name: Read Deploy Settings
+        run: |
+          bash scripts/ci/check-placeholders.sh deploy.json
+          bash scripts/ci/read-deploy-settings.sh >> "${GITHUB_ENV}"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Read Service Config
+        run: bash scripts/ci/read-service-config.sh "${PROJECT_NAME}" "${SERVICE_NAME}" "${{ vars.AWS_REGION }}" "${SERVICE_TIER}" >> "${GITHUB_ENV}"
+
+      - name: Ensure Image
+        id: image
+        uses: ./.github/actions/ensure-image
+        with:
+          repository-name: ${{ env.ECR_REPOSITORY_NAME }}
+          registry-host: ${{ env.ECR_REGISTRY_HOST }}
+          tag: ${{ matrix.tag }}
+          region: ${{ vars.AWS_REGION }}
+
+      - name: Summary
+        env:
+          BUILT: ${{ steps.image.outputs.built }}
+        run: |
+          if [[ "${BUILT}" == "true" ]]; then RESULT="built and pushed"; else RESULT="already present"; fi
+          echo "${ECR_REPOSITORY_URL}:${{ matrix.tag }} (${{ matrix.environment }}): ${RESULT}" >> "${GITHUB_STEP_SUMMARY}"

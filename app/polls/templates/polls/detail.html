@@ -1,0 +1,42 @@
+{% extends 'polls/base.html' %} {% block content %}
+<div class="max-w-2xl mx-auto bg-gray-800 rounded-lg p-8">
+  <h1 class="text-2xl font-bold mb-6 text-purple-400">
+    {{ question.question_text }}
+  </h1>
+
+  <form action="{% url 'polls:vote' question.id %}" method="post">
+    {% csrf_token %} {% if error_message %}
+    <p class="mb-4 text-red-400 font-semibold">{{ error_message }}</p>
+    {% endif %}
+
+    <div class="space-y-4">
+      {% for choice in question.choice_set.all %}
+      <div
+        class="flex items-center p-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition duration-200"
+      >
+        <input
+          type="radio"
+          name="choice"
+          id="choice{{ forloop.counter }}"
+          value="{{ choice.id }}"
+          class="h-4 w-4 text-purple-500 focus:ring-purple-400"
+        />
+        <label
+          for="choice{{ forloop.counter }}"
+          class="ml-3 block text-gray-200"
+        >
+          {{ choice.choice_text }}
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+
+    <button
+      type="submit"
+      class="mt-6 w-full bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition duration-200"
+    >
+      Vote
+    </button>
+  </form>
+</div>
+{% endblock %}

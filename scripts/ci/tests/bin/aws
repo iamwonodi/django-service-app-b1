@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Fake aws for offline tests. Every call is appended to $FAKE_LOG.
+#   FAKE_SSM_DIR          directory of parameter values; file name is the parameter name with / replaced by _
+#   FAKE_ECR_EXISTS       "true" makes "ecr describe-images" succeed (default: fail)
+#   FAKE_S3_FAIL          makes every "s3 ..." call fail
+#   FAKE_SEND_FAIL        makes "ssm send-command" fail
+#   FAKE_INVOCATIONS_DIR  1.json, 2.json ...: one is returned per "list-command-invocations" call, the last repeating
+[[ -n "${FAKE_LOG:-}" ]] && printf 'aws %s\n' "$*" >> "${FAKE_LOG}"
+case "$1 $2" in
+  "ssm get-parameter")
+    name=""; while [[ $# -gt 0 ]]; do [[ "$1" == "--name" ]] && name="$2"; shift; done
+    file="${FAKE_SSM_DIR:-/nonexistent}/$(printf '%s' "${name}" | tr '/' '_')"
+    if [[ -f "${file}" ]]; then cat "${file}"; exit 0; fi
+    echo "An error occurred (ParameterNotFound) when calling the GetParameter operation" >&2; exit 254 ;;
+  "ecr describe-images")
+    [[ "${FAKE_ECR_EXISTS:-}" == "true" ]] && exit 0; exit 254 ;;
+  "s3 cp"|"s3 sync")
+    [[ -n "${FAKE_S3_FAIL:-}" ]] && { echo "upload failed" >&2; exit 1; }; exit 0 ;;
+  "ssm send-command")
+    [[ -n "${FAKE_SEND_FAIL:-}" ]] && { echo "AccessDeniedException" >&2; exit 254; }
+    echo "cmd-0123"; exit 0 ;;
+  "ssm list-command-invocations")
+    counter="${FAKE_INVOCATIONS_DIR}/.n"; n=$(( $(cat "${counter}" 2>/dev/null || echo 0) + 1 )); echo "${n}" > "${counter}"
+    file="${FAKE_INVOCATIONS_DIR}/${n}.json"
+    [[ -f "${file}" ]] || file="$(ls "${FAKE_INVOCATIONS_DIR}"/*.json | sort -V | tail -1)"
+    cat "${file}"; exit 0 ;;
+esac
+exit 0

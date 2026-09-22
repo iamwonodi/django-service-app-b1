@@ -1,0 +1,86 @@
+name: Tests
+
+# Everything that can be proven without AWS: the Django tests (with production
+# requirements only, then with the development ones), the pipeline's scripts, and that
+# the image builds.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+
+  django:
+    name: Django Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    env:
+      DJANGO_SECRET_KEY: test-only
+      DJANGO_ALLOWED_HOSTS: testserver
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set Up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install Production Requirements
+        run: pip install -r requirements.txt
+
+      - name: Test With Production Requirements Only
+        run: python manage.py test
+
+      - name: Install Development Requirements
+        run: pip install -r requirements-dev.txt
+
+      - name: Test With Development Requirements
+        run: python manage.py test
+
+  scripts:
+    name: Pipeline Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Shellcheck
+        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh app/entrypoint.prod.sh
+
+      - name: Script Tests
+        run: bash scripts/ci/tests/run-all.sh
+
+  image:
+    name: Image Builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Lint The Dockerfile
+        uses: hadolint/hadolint-action@v3.5.0
+        with:
+          dockerfile: app/Dockerfile
+
+      - name: Set Up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Builds, does not push: catches a broken Dockerfile, Tailwind build or
+      # collectstatic before a release tag does.
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: app
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

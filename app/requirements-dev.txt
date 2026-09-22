@@ -1,0 +1,6 @@
+# Local development. Not installed in the production image.
+-r requirements.txt
+
+# Reloads the browser when a template or stylesheet changes. Loaded only when
+# DJANGO_DEBUG is true (see settings.py).
+django-browser-reload==1.21.0
