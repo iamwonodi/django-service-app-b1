@@ -91,18 +91,23 @@ ORDER=(ECR_REPOSITORY_URL ECR_REGISTRY_HOST ECR_REPOSITORY_NAME SERVICE_PORT SER
 DATABASE_ENGINE="$(get .database.engine)"
 
 if [[ -n "${DATABASE_ENGINE}" ]]; then
+  # The port is published directly for a managed database (staging, production)
+  # and as an SSM parameter for the EC2 database host (development).
+  DATABASE_PORT="$(get .database.port)"
   PORT_PARAMETER="$(get .database.port_parameter)"
 
   VALUES[DATABASE_ENGINE]="${DATABASE_ENGINE}"
   VALUES[DATABASE_HOST]="$(get .database.host)"
 
-  [[ -n "${PORT_PARAMETER}" ]] || { echo "ERROR: ${NAME} has a database but no database.port_parameter." >&2; exit 1; }
+  if [[ -z "${DATABASE_PORT}" ]]; then
+    [[ -n "${PORT_PARAMETER}" ]] || { echo "ERROR: ${NAME} has a database but neither database.port nor database.port_parameter." >&2; exit 1; }
 
-  if ! DATABASE_PORT="$(aws ssm get-parameter --name "${PORT_PARAMETER}" --query Parameter.Value --output text --region "${REGION}" 2>&1)"; then
-    echo "ERROR: could not read the database port at ${PORT_PARAMETER}." >&2
-    echo "       ${DATABASE_PORT}" >&2
-    echo "       The platform team publishes each engine's port there once the engine is registered." >&2
-    exit 1
+    if ! DATABASE_PORT="$(aws ssm get-parameter --name "${PORT_PARAMETER}" --query Parameter.Value --output text --region "${REGION}" 2>&1)"; then
+      echo "ERROR: could not read the database port at ${PORT_PARAMETER}." >&2
+      echo "       ${DATABASE_PORT}" >&2
+      echo "       The platform team publishes each engine's port there once the engine is registered." >&2
+      exit 1
+    fi
   fi
 
   VALUES[DATABASE_PORT]="${DATABASE_PORT}"

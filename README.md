@@ -1,6 +1,6 @@
 # Django service: application blueprint
 
-A Django service, its container, and the pipeline that releases and deploys it onto the platform that [core](https://github.com/iamwonodi/audit) runs. It is one half of a service. The other half is the **infrastructure repository** ([service-infra](https://github.com/iamwonodi/service-infra)), which creates the service's cloud resources.
+A Django service, its container, and the pipeline that releases and deploys it onto the platform that [core](https://github.com/iamwonodi/aws-core-infra-b1) runs. It is one half of a service. The other half is the **infrastructure repository** ([aws-service-infra-b1](https://github.com/iamwonodi/aws-service-infra-b1)), which creates the service's cloud resources.
 
 ```text
    this repository                            service-infra
