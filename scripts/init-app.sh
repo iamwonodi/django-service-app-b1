@@ -22,14 +22,20 @@ set -euo pipefail
 # Usage:
 #   scripts/init-app.sh --project NAME --service NAME --region REGION \
 #       [--tier private|internal] [--reviewers login1,login2] [--repo OWNER/REPO] \
-#       [--skip-github] [--dry-run]
+#       [--environments LIST] [--skip-github] [--dry-run]
+#
+#   --environments LIST  the environments this app deploys to: comma-separated,
+#                        any of development, staging and production, and only
+#                        ones its infrastructure repository runs. Written to
+#                        .github/environments.json; omitted, the current list
+#                        is kept.
 #
 # Needs: bash, jq; gh (authenticated) unless --skip-github or --dry-run.
 # ==============================================================================
 
 REPO_ROOT="${INIT_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
-PROJECT="" SERVICE="" REGION="" TIER="private" REVIEWERS="" REPO=""
+PROJECT="" SERVICE="" REGION="" TIER="private" REVIEWERS="" REPO="" ENVIRONMENTS_ARG=""
 SKIP_GITHUB=false
 DRY_RUN=false
 
@@ -43,6 +49,7 @@ while [[ $# -gt 0 ]]; do
     --tier)        TIER="${2:-}"; shift 2 ;;
     --reviewers)   REVIEWERS="${2:-}"; shift 2 ;;
     --repo)        REPO="${2:-}"; shift 2 ;;
+    --environments) ENVIRONMENTS_ARG="${2:-}"; shift 2 ;;
     --skip-github) SKIP_GITHUB=true; shift ;;
     --dry-run)     DRY_RUN=true; shift ;;
     -h|--help)     usage; exit 0 ;;
@@ -55,7 +62,7 @@ errors=()
 [[ "${PROJECT}" =~ ^[a-z][a-z0-9-]{1,14}[a-z0-9]$ ]] || errors+=("--project must be 3-16 lowercase letters, digits or hyphens, starting with a letter.")
 [[ "${SERVICE}" =~ ^[a-z][a-z0-9-]{1,20}[a-z0-9]$ ]] || errors+=("--service must be 3-22 lowercase letters, digits or hyphens, starting with a letter.")
 case "${SERVICE}" in
-  database|database-hub|fleet|internal|platform|private|services)
+  database|database-hub|fleet|internal|platform|private|services|team-tools|database-*)
     errors+=("--service '${SERVICE}' is a name the platform itself uses; choose another.") ;;
 esac
 [[ "${REGION}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]$ ]] || errors+=("--region must look like af-south-1.")
@@ -71,8 +78,22 @@ fi
 command -v jq >/dev/null 2>&1 || { echo "ERROR: required command not found: jq" >&2; exit 1; }
 
 ENABLED_FILE="${REPO_ROOT}/.github/environments.json"
-[[ -f "${ENABLED_FILE}" ]] || { echo "ERROR: ${ENABLED_FILE} not found." >&2; exit 1; }
-mapfile -t ENVIRONMENTS < <(jq -r '.[]' "${ENABLED_FILE}")
+
+if [[ -n "${ENVIRONMENTS_ARG}" ]]; then
+  [[ "${ENVIRONMENTS_ARG}" =~ ^(development|staging|production)(,(development|staging|production))*$ ]] \
+    || { echo "ERROR: --environments must be a comma-separated list of development, staging and production." >&2; exit 1; }
+  # In the platform's order, each once.
+  ENVIRONMENTS_JSON="$(jq -cn --arg list "${ENVIRONMENTS_ARG}" \
+    '($list | split(",")) as $given | [("development","staging","production") | select(. as $e | $given | index($e))]')"
+else
+  [[ -f "${ENABLED_FILE}" ]] || { echo "ERROR: ${ENABLED_FILE} not found; pass --environments." >&2; exit 1; }
+  # Checked the way every workflow checks it: known names, none twice, not empty.
+  ENVIRONMENTS_JSON="$(ENVIRONMENTS_FILE="${ENABLED_FILE}" bash "${REPO_ROOT}/scripts/ci/enabled-environments.sh")"
+fi
+if [[ "${DRY_RUN}" != "true" ]]; then
+  jq -c '.' <<< "${ENVIRONMENTS_JSON}" > "${ENABLED_FILE}"
+fi
+mapfile -t ENVIRONMENTS < <(jq -r '.[]' <<< "${ENVIRONMENTS_JSON}")
 [[ ${#ENVIRONMENTS[@]} -gt 0 ]] || { echo "ERROR: no environments are enabled in ${ENABLED_FILE}." >&2; exit 1; }
 
 if [[ "${SKIP_GITHUB}" != "true" && "${DRY_RUN}" != "true" ]]; then

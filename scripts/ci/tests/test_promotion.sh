@@ -5,7 +5,7 @@ C="${SCRIPTS}/check-promotion.sh"
 W="${SCRIPTS}/record-deployment.sh"
 export FAKE_GH_LOG="${WORK}/gh.log" FAKE_GH_STATUSES_DIR="${WORK}/statuses" FAKE_GH_DEPLOYMENTS_FILE="${WORK}/deployments.json"
 mkdir -p "${WORK}/statuses" "${WORK}/repo/.github" "${WORK}/repo/scripts/ci"
-cp "${SCRIPTS}/check-promotion.sh" "${SCRIPTS}/resolve-environments.sh" "${WORK}/repo/scripts/ci/"
+cp "${SCRIPTS}/check-promotion.sh" "${SCRIPTS}/resolve-environments.sh" "${SCRIPTS}/enabled-environments.sh" "${WORK}/repo/scripts/ci/"
 printf '["development","staging","production"]' > "${WORK}/repo/.github/environments.json"
 CP="${WORK}/repo/scripts/ci/check-promotion.sh"
 : > "${FAKE_GH_LOG}"
@@ -40,4 +40,13 @@ check "a bad tag is refused"                            bash -c "! bash '$W' acm
 check "a non-https URL is refused"                      bash -c "! bash '$W' acme/auth development v1.2.0 'http://x.org' >/dev/null 2>&1"
 check "a bad environment is refused"                    bash -c "! bash '$W' acme/auth 'dev;x' v1.2.0 https://x.org >/dev/null 2>&1"
 check "a gh failure is reported"                        bash -c "! FAKE_GH_FAIL=1 bash '$W' acme/auth development v1.2.0 https://x.org >/dev/null 2>&1"
+echo "== the environment list is checked and ordered"
+R="${WORK}/repo/scripts/ci/resolve-environments.sh"
+printf '["production","development"]' > "${WORK}/repo/.github/environments.json"
+check "written out of order, the first is still development" test "$(bash "$R" auto 2>/dev/null)" = '["development"]'
+check "and production's lower is development"             test "$(bash "$R" lower production 2>/dev/null)" = development
+printf '["development","prod"]' > "${WORK}/repo/.github/environments.json"
+check "a misspelt environment is refused"                 bash -c "! bash '$R' all >/dev/null 2>&1"
+printf '["staging","staging"]' > "${WORK}/repo/.github/environments.json"
+check "an environment listed twice is refused"            bash -c "! bash '$R' all >/dev/null 2>&1"
 finish

@@ -26,7 +26,7 @@ app/                      the Django project, its Dockerfile, and the deployment
   .env                      its configuration (a template of placeholders and secret references)
 deploy.json               this service's project, name and tier
 .github/
-  environments.json         the enabled environments, lowest first
+  environments.json         the environments this app deploys to (checked; always development, staging, production order)
   workflows/                release, build-and-push, deploy, tests
   actions/ensure-image/     build and push an image if the tag is not already in ECR
 scripts/                  init-app, print-role-entry, fetch-role-arn

@@ -85,5 +85,5 @@ scripts/fetch-role-arn.sh --core OWNER/CORE-REPOSITORY --environment development
 
 ## Not built yet
 
-- **The service's database and user are not created in the engine.** The infrastructure repository generates the credentials and stores them in the secret, but nothing creates them in the database, so a service with a database cannot connect until that exists.
+- **The service's database and user** are created by its infrastructure repository's apply (core's provisioning), with its agents' logins; nothing is needed here.
 

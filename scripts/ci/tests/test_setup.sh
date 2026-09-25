@@ -8,7 +8,7 @@ SOURCE_ROOT="$(cd "${TOP}/.." && pwd)"
 fresh(){
   rm -rf "${WORK}/repo"; mkdir -p "${WORK}/repo/scripts/ci" "${WORK}/repo/.github"
   cp "${SOURCE_ROOT}/deploy.json" "${WORK}/repo/"; cp "${SOURCE_ROOT}/.github/environments.json" "${WORK}/repo/.github/"
-  cp "${SCRIPTS}/check-placeholders.sh" "${WORK}/repo/scripts/ci/"
+  cp "${SCRIPTS}/check-placeholders.sh" "${SCRIPTS}/enabled-environments.sh" "${WORK}/repo/scripts/ci/"
   git -C "${WORK}/repo" init -q; git -C "${WORK}/repo" remote add origin https://github.com/acme/auth-app.git
   export INIT_REPO_ROOT="${WORK}/repo" FAKE_GH_LOG="${WORK}/gh.log"; : > "${FAKE_GH_LOG}"
 }
@@ -86,4 +86,16 @@ export FAKE_GH_ROLE_ARNS_FILE="${WORK}/missing.json"
 check "a missing role-arns file is reported"             bash -c "! bash '$FETCH' --core acme/core --environment development >/dev/null 2>&1"
 check "bad --core"                                       bash -c "! bash '$FETCH' --core nonsense --environment development >/dev/null 2>&1"
 check "bad --environment"                                bash -c "! bash '$FETCH' --core acme/core --environment qa >/dev/null 2>&1"
+echo "== environments"
+fresh; run --environments production,development > "${WORK}/out.txt" 2>&1; rc=$?
+check "--environments succeeds"                         test $rc -eq 0
+check "the list is written, in order"                   bash -c "[ \"\$(jq -c . '${WORK}/repo/.github/environments.json')\" = '[\"development\",\"production\"]' ]"
+check "no GitHub Environment for staging"               bash -c "! grep -q 'environments/staging' '${FAKE_GH_LOG}'"
+check "production's is set up"                          grep -q 'environments/production --input' "${FAKE_GH_LOG}"
+fresh
+check "an unknown --environments is refused"            bash -c "! bash '${INIT}' ${ARGS[*]} --environments prod >/dev/null 2>&1"
+fresh; echo '["development","prod"]' > "${WORK}/repo/.github/environments.json"
+check "a misspelt list is refused"                      bash -c "! bash '${INIT}' ${ARGS[*]} >/dev/null 2>&1"
+fresh
+check "a database- service name is refused"             bash -c "! bash '${INIT}' --project acme --service database-x --region eu-west-1 >/dev/null 2>&1"
 finish

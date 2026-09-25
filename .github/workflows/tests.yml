@@ -84,3 +84,25 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  commits:
+    name: Commit Messages
+    runs-on: ubuntu-latest
+
+    # Releases are decided from commit messages: a pull request's commits and
+    # title must be Conventional Commits, or the release ignores them.
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check Commit Messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Passed as data, never pasted into the script.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: bash scripts/ci/check-commit-messages.sh "${BASE_SHA}" "${HEAD_SHA}" "${PR_TITLE}"

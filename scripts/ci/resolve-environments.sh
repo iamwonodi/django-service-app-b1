@@ -26,8 +26,10 @@ FILE="${ROOT}/.github/environments.json"
 
 [[ -f "${FILE}" ]] || { echo "ERROR: ${FILE} not found." >&2; exit 1; }
 
-ENABLED="$(jq -c 'if type == "array" and length > 0 and all(.[]; type == "string") then . else error("bad") end' "${FILE}" 2>/dev/null)" \
-  || { echo "ERROR: ${FILE} must be a non-empty JSON array of environment names." >&2; exit 1; }
+# Checked (known names only, none twice, not empty) and in the platform's order,
+# so "lower" and "auto" follow development, staging, production whatever order
+# the file is written in.
+ENABLED="$(ENVIRONMENTS_FILE="${FILE}" bash "$(dirname "${BASH_SOURCE[0]}")/enabled-environments.sh")"
 
 MODE="${1:-}"
 ENV="${2:-}"
