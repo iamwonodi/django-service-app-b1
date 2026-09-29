@@ -7,6 +7,7 @@ This is a **blueprint**: many services clone it. Never commit anything service- 
 - **Never run anything that changes AWS**, and never run `terraform` (there is none here). Read the real files, and the scripts a workflow calls, before proposing a change.
 - Ask before building. Classify review findings CRITICAL / HIGH / MEDIUM / LOW / OPTIONAL, say PASS when something is correct, and do not rewrite working code for style.
 - Comments explain why, not what. Scripts are exercised against real inputs and their error paths before they are called done.
+- File layout: every top-level `locals` block in `locals.tf`, every `data` block in `data.tf`. Workflows run on `ubuntu-24.04`, never `ubuntu-latest`. `scripts/ci/check-file-layout.sh` fails CI otherwise.
 
 ## Where things live
 
@@ -25,6 +26,7 @@ This is a **blueprint**: many services clone it. Never commit anything service- 
 (cd app && python manage.py test)
 shellcheck -S warning scripts/*.sh scripts/ci/*.sh
 bash scripts/ci/tests/run-all.sh
+bash scripts/ci/check-file-layout.sh .
 actionlint
 ```
 
