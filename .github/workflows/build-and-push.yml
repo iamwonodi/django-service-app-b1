@@ -54,7 +54,7 @@ jobs:
 
   resolve:
     name: Resolve Build Targets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tags: ${{ steps.tags.outputs.tags }}
       environments: ${{ steps.environments.outputs.environments }}
@@ -103,7 +103,7 @@ jobs:
   build:
     name: Build ${{ matrix.tag }} (${{ matrix.environment }})
     needs: resolve
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     environment: ${{ matrix.environment }}
 

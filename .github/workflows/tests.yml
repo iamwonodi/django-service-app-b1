@@ -19,7 +19,7 @@ jobs:
 
   django:
     name: Django Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: app
@@ -49,7 +49,7 @@ jobs:
 
   scripts:
     name: Pipeline Scripts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
@@ -60,9 +60,18 @@ jobs:
       - name: Script Tests
         run: bash scripts/ci/tests/run-all.sh
 
+
+      # locals only in locals.tf, data only in data.tf, and every workflow on a
+
+      # pinned runner image.
+
+      - name: File Layout
+
+        run: bash scripts/ci/check-file-layout.sh .
+
   image:
     name: Image Builds
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
@@ -87,7 +96,7 @@ jobs:
 
   commits:
     name: Commit Messages
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # Releases are decided from commit messages: a pull request's commits and
     # title must be Conventional Commits, or the release ignores them.
