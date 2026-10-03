@@ -88,6 +88,7 @@ CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 # -----------------------------------------------------------------------------
 
 INSTALLED_APPS = [
+    "apps.core",
     "polls.apps.PollsConfig",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -101,7 +102,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     # First: answers the load balancer's health check before any host validation.
-    "config.middleware.HealthCheckMiddleware",
+    "apps.core.middleware.HealthCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
