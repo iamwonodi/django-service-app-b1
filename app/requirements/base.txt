@@ -1,5 +1,5 @@
-# Runtime dependencies only -- this is what the production image installs.
-# Development tooling (live reload, notebooks, ...) belongs in requirements-dev.txt.
+# What every environment needs. Never installed on its own: production.txt adds
+# the web server, development.txt the development tools.
 # Everything is pinned so a rebuilt image is the same image.
 
 # 5.2 is the long-term support release: security fixes until April 2028. The
@@ -8,8 +8,6 @@
 Django==5.2.17
 asgiref==3.12.1
 sqlparse==0.6.0
-
-gunicorn==26.2.0
 packaging==26.3
 
 # PostgreSQL driver (the database engine the platform runs today). A different

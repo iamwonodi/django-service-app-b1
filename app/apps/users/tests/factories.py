@@ -6,7 +6,7 @@ except ImportError:
     # The first CI run installs the production requirements only, to prove the
     # application does not need a development tool; the tests that use the
     # factories are skipped there and run in the second pass.
-    raise unittest.SkipTest("factory-boy is not installed (requirements-dev.txt)") from None
+    raise unittest.SkipTest("factory-boy is not installed (requirements/development.txt)") from None
 
 from apps.users.models import User
 

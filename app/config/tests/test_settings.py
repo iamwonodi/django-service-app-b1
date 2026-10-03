@@ -178,7 +178,7 @@ class DevelopmentToolingTests(unittest.TestCase):
         try:
             import django_browser_reload  # noqa: F401
         except ImportError:
-            self.skipTest("django-browser-reload is not installed (requirements-dev.txt)")
+            self.skipTest("django-browser-reload is not installed (requirements/development.txt)")
         self.assertIn("django_browser_reload", load(DEVELOPMENT, DJANGO_DEBUG="true")["apps"])
 
 

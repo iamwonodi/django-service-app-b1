@@ -36,13 +36,13 @@ jobs:
           python-version: "3.14"
 
       - name: Install Production Requirements
-        run: pip install -r requirements.txt
+        run: pip install -r requirements/production.txt
 
       - name: Test With Production Requirements Only
         run: python manage.py test
 
       - name: Install Development Requirements
-        run: pip install -r requirements-dev.txt
+        run: pip install -r requirements/development.txt
 
       - name: Test With Development Requirements
         run: python manage.py test

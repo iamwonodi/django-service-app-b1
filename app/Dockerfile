@@ -40,8 +40,8 @@ ENV PIP_NO_CACHE_DIR=1 \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install -r /tmp/requirements.txt
+COPY requirements/ /tmp/requirements/
+RUN pip install -r /tmp/requirements/production.txt
 
 
 # ------------------------------------------------------------------------------
