@@ -4,3 +4,8 @@
 # Reloads the browser when a template or stylesheet changes. Loaded only when
 # DJANGO_DEBUG is true (see config/settings/development.py).
 django-browser-reload==1.21.0
+
+# Test data factories (apps/*/tests/factories.py). Faker is factory-boy's
+# dependency, pinned like every other transitive package here.
+factory-boy==3.3.3
+Faker==40.40.0

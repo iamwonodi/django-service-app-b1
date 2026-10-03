@@ -4,13 +4,8 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.core.tests.support import PLAIN_STATIC
 from apps.polls.models import Choice, Question
-
-PLAIN_STATIC = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-}
-
 
 def make_question(text, days=0):
     return Question.objects.create(question_text=text, pub_date=timezone.now() + datetime.timedelta(days=days))
