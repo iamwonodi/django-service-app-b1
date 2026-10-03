@@ -176,5 +176,6 @@ cython_debug/
 
 # ---- Tracked exceptions -------------------------------------------------------
 !.env
+!.env.example
 !/apps/*/static/
 !/apps/*/static/**

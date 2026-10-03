@@ -153,6 +153,12 @@ TEMPLATES = [
 STATIC_URL = f"/static/{SERVICE_NAME}/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Project-wide source files (css/, js/, img/). The folder does not exist until a
+# service has something to put in it, and Django warns about a listed folder that
+# is missing, so it is listed only once it is there. Each app's own files live in
+# its static/<app>/ and need no entry.
+STATICFILES_DIRS = [path for path in [BASE_DIR / "static"] if path.is_dir()]
+
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -253,6 +259,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = "en-us"
+# Project-level translations (python manage.py makemessages). Each app's own go in
+# its locale/.
+LOCALE_PATHS = [BASE_DIR / "locale"]
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
