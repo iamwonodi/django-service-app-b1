@@ -49,9 +49,13 @@ RUN pip install -r /tmp/requirements.txt
 # ------------------------------------------------------------------------------
 FROM python:3.14-slim
 
+# The settings module is pinned here, not left to manage.py's default (which is
+# the local-workstation module), so a "docker exec ... manage.py shell" on a host
+# runs with the same settings as the server.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:${PATH}"
+    PATH="/opt/venv/bin:${PATH}" \
+    DJANGO_SETTINGS_MODULE=config.settings.production
 
 # A fixed, unprivileged user. The compose file also drops every capability.
 RUN groupadd --system --gid 10001 app \
@@ -71,7 +75,8 @@ COPY --from=tailwind --chown=app:app /build/theme/static/css/dist /app/theme/sta
 # Collect the static files into /app/staticfiles. The pipeline copies that folder
 # out of the image and uploads it. The key is a throwaway used only by this step:
 # collectstatic needs settings to import, but reads no secret and stores nothing.
-RUN DJANGO_SECRET_KEY=build-time-only-not-a-secret \
+RUN DJANGO_SETTINGS_MODULE=config.settings.production \
+    DJANGO_SECRET_KEY=build-time-only-not-a-secret \
     DJANGO_ALLOWED_HOSTS=build \
     python manage.py collectstatic --noinput \
  && chown -R app:app /app/staticfiles

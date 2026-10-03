@@ -14,10 +14,10 @@ from ._environment import base_environment
 
 APP_DIR = Path(__file__).resolve().parents[2]
 
-PROBE = textwrap.dedent(
+PROBE_TEMPLATE = textwrap.dedent(
     """
     import json, os
-    os.environ["DJANGO_SETTINGS_MODULE"] = "app.settings"
+    os.environ["DJANGO_SETTINGS_MODULE"] = __MODULE__
     try:
         from django.conf import settings
         s = settings
@@ -33,7 +33,10 @@ PROBE = textwrap.dedent(
             "apps": list(s.INSTALLED_APPS),
             "hsts": s.SECURE_HSTS_SECONDS,
             "cookie_secure": s.SESSION_COOKIE_SECURE,
-            "proxy_header": list(s.SECURE_PROXY_SSL_HEADER),
+            "proxy_header": list(s.SECURE_PROXY_SSL_HEADER or []),
+            "csrf_cookie_secure": s.CSRF_COOKIE_SECURE,
+            "nosniff": s.SECURE_CONTENT_TYPE_NOSNIFF,
+            "email_backend": s.EMAIL_BACKEND,
         }))
     except Exception as error:
         print(json.dumps({"ok": False, "error": type(error).__name__, "message": str(error)}))
@@ -49,8 +52,13 @@ BASE_ENV = {
 }
 
 
-def load(**overrides):
-    """Import settings with BASE_ENV plus overrides (a value of None removes a variable)."""
+PRODUCTION = "config.settings.production"
+DEVELOPMENT = "config.settings.development"
+STAGING = "config.settings.staging"
+
+
+def load(module=PRODUCTION, **overrides):
+    """Import `module` with BASE_ENV plus overrides (a value of None removes a variable)."""
     env = dict(BASE_ENV)
     for key, value in overrides.items():
         if value is None:
@@ -58,7 +66,7 @@ def load(**overrides):
         else:
             env[key] = value
     result = subprocess.run(
-        [sys.executable, "-c", PROBE], env=env, cwd=APP_DIR, capture_output=True, text=True, timeout=60
+        [sys.executable, "-c", PROBE_TEMPLATE.replace("__MODULE__", repr(module))], env=env, cwd=APP_DIR, capture_output=True, text=True, timeout=60
     )
     return json.loads(result.stdout.strip().splitlines()[-1])
 
@@ -83,7 +91,7 @@ class RequiredSettingsTests(unittest.TestCase):
         self.assertFalse(load(DJANGO_SECRET_KEY="")["ok"])
 
     def test_debug_may_omit_the_secret_key(self):
-        result = load(DJANGO_SECRET_KEY=None, DJANGO_DEBUG="true")
+        result = load(DEVELOPMENT, DJANGO_SECRET_KEY=None, DJANGO_DEBUG="true")
         self.assertTrue(result["ok"])
 
     def test_missing_allowed_hosts_fails_in_production(self):
@@ -92,11 +100,42 @@ class RequiredSettingsTests(unittest.TestCase):
         self.assertIn("DJANGO_ALLOWED_HOSTS", result["message"])
 
     def test_debug_defaults_allowed_hosts_to_localhost(self):
-        result = load(DJANGO_ALLOWED_HOSTS=None, DJANGO_DEBUG="1")
+        result = load(DEVELOPMENT, DJANGO_ALLOWED_HOSTS=None, DJANGO_DEBUG="1")
         self.assertIn("localhost", result["allowed_hosts"])
 
     def test_debug_is_off_by_default(self):
         self.assertFalse(load()["debug"])
+
+
+class ModuleTests(unittest.TestCase):
+    def test_production_refuses_to_start_with_debug_on(self):
+        for value in ("true", "1", "yes"):
+            with self.subTest(DJANGO_DEBUG=value):
+                result = load(DJANGO_DEBUG=value)
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["error"], "ImproperlyConfigured")
+                self.assertIn("DJANGO_DEBUG", result["message"])
+
+    def test_staging_is_production(self):
+        self.assertEqual(load(STAGING)["debug"], False)
+        self.assertEqual(load(STAGING, DJANGO_SECRET_KEY=None)["ok"], False)
+        self.assertEqual(load(STAGING, DJANGO_DEBUG="true")["ok"], False)
+        production, staging = load(PRODUCTION), load(STAGING)
+        self.assertEqual(production, staging)
+
+    def test_development_starts_with_no_environment_variables(self):
+        result = load(DEVELOPMENT, DJANGO_SECRET_KEY=None, DJANGO_ALLOWED_HOSTS=None)
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(result["debug"])
+        self.assertEqual(result["engine"], "django.db.backends.sqlite3")
+        self.assertIn("localhost", result["allowed_hosts"])
+        self.assertEqual(result["email_backend"], "django.core.mail.backends.console.EmailBackend")
+
+    def test_development_does_not_have_the_production_hardening(self):
+        # Proves the hardening is production's, so it cannot be lost by editing base.
+        result = load(DEVELOPMENT)
+        self.assertFalse(result["cookie_secure"])
+        self.assertEqual(result["hsts"], 0)
 
 
 class SecurityTests(unittest.TestCase):
@@ -104,6 +143,15 @@ class SecurityTests(unittest.TestCase):
         result = load()
         self.assertEqual(result["proxy_header"], ["HTTP_X_FORWARDED_PROTO", "https"])
         self.assertTrue(result["cookie_secure"])
+        self.assertTrue(result["csrf_cookie_secure"])
+        self.assertTrue(result["nosniff"])
+
+    def test_the_hardening_does_not_depend_on_a_variable(self):
+        # Even with every variable that could plausibly relax it set to "off".
+        result = load(DJANGO_DEBUG="false", DJANGO_SECURE_HSTS_SECONDS="0")
+        self.assertTrue(result["cookie_secure"])
+        self.assertTrue(result["csrf_cookie_secure"])
+        self.assertFalse(result["debug"])
 
     def test_hsts_is_off_until_asked_for(self):
         self.assertEqual(load()["hsts"], 0)
@@ -131,7 +179,7 @@ class DevelopmentToolingTests(unittest.TestCase):
             import django_browser_reload  # noqa: F401
         except ImportError:
             self.skipTest("django-browser-reload is not installed (requirements-dev.txt)")
-        self.assertIn("django_browser_reload", load(DJANGO_DEBUG="true")["apps"])
+        self.assertIn("django_browser_reload", load(DEVELOPMENT, DJANGO_DEBUG="true")["apps"])
 
 
 class DatabaseTests(unittest.TestCase):

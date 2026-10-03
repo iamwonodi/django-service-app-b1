@@ -1,5 +1,5 @@
 """
-Django settings.
+Settings shared by every environment.
 
 Every value that differs between environments comes from an environment
 variable, so the same image runs in development, staging and production. On the
@@ -10,6 +10,10 @@ docker-compose.yml).
 Nothing here has a production default that would be unsafe: a missing secret or
 allowed host stops the process with a message that names the cause, rather than
 starting an application that is quietly misconfigured.
+
+Do not point DJANGO_SETTINGS_MODULE at this module. production.py (what every
+deployed container runs) and development.py (a local workstation) add what must
+not depend on a variable.
 """
 
 import os
@@ -17,7 +21,8 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# config/settings/base.py -> the app/ directory, the build context.
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 # -----------------------------------------------------------------------------
@@ -41,6 +46,7 @@ def env_list(name):
 # Core
 # -----------------------------------------------------------------------------
 
+# production.py refuses to start when this is true; development.py turns it on.
 DEBUG = env_bool("DJANGO_DEBUG", False)
 
 # Names this service. It is used to build STATIC_URL, so it must match the
@@ -51,8 +57,8 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 
 if not SECRET_KEY:
     if DEBUG:
-        # Local development only. Never reachable in production, where DEBUG is
-        # false and this branch raises instead.
+        # Local development only. production.py refuses DEBUG, and with DEBUG off
+        # this branch raises instead.
         SECRET_KEY = "insecure-development-key-not-for-production"
     else:
         # An empty key here usually means the __FROM_SECRET__ resolution on the
@@ -95,7 +101,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     # First: answers the load balancer's health check before any host validation.
-    "app.middleware.HealthCheckMiddleware",
+    "config.middleware.HealthCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -107,20 +113,8 @@ MIDDLEWARE = [
 
 TAILWIND_APP_NAME = "theme"
 
-# Development tooling. It injects a script into every response and serves an
-# event-stream endpoint, so it is loaded only in DEBUG and only if installed
-# (requirements-dev.txt); the production image does not contain it.
-if DEBUG:
-    try:
-        import django_browser_reload  # noqa: F401
-    except ImportError:
-        pass
-    else:
-        INSTALLED_APPS += ["django_browser_reload"]
-        MIDDLEWARE += ["django_browser_reload.middleware.BrowserReloadMiddleware"]
-
-ROOT_URLCONF = "app.urls"
-WSGI_APPLICATION = "app.wsgi.application"
+ROOT_URLCONF = "config.urls"
+WSGI_APPLICATION = "config.wsgi.application"
 
 TEMPLATES = [
     {
@@ -137,30 +131,6 @@ TEMPLATES = [
         },
     },
 ]
-
-
-# -----------------------------------------------------------------------------
-# Proxy and transport security
-# -----------------------------------------------------------------------------
-# TLS terminates at CloudFront and the ALB, so the application always sees plain
-# HTTP. Without this header mapping request.is_secure() is False, secure cookies
-# are never set, and Django builds http:// URLs that break login flows.
-#
-# SECURE_SSL_REDIRECT stays off: CloudFront already redirects HTTP to HTTPS at the
-# edge, and a second redirect inside the origin would only add a hop.
-#
-# HSTS is off by default because it cannot be undone for the period it names.
-# Set DJANGO_SECURE_HSTS_SECONDS once the domain is committed to HTTPS.
-# -----------------------------------------------------------------------------
-
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
-
-SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0"))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
-SECURE_CONTENT_TYPE_NOSNIFF = True
 
 
 # -----------------------------------------------------------------------------

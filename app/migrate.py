@@ -101,7 +101,7 @@ def migration_lock(connection, name, timeout, sleep=time.sleep, clock=time.monot
 
 
 def main():
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "app.settings")
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.production")
 
     import django
 

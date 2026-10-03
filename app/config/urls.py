@@ -10,6 +10,6 @@ urlpatterns = [
 ]
 
 # Development-only live reload. Mounted only when its app is installed, which
-# settings.py does under DEBUG, so the endpoint does not exist in production.
+# development.py does under DEBUG, so the endpoint does not exist in production.
 if "django_browser_reload" in settings.INSTALLED_APPS:
     urlpatterns += [path("__reload__/", include("django_browser_reload.urls"))]
