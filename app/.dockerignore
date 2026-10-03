@@ -6,6 +6,7 @@
 .env
 .env.*
 **/.env
+.env.example
 
 # Version control and editor
 .git
@@ -22,7 +23,9 @@ docker-compose*.yml
 **/node_modules
 .venv
 venv
-requirements-dev.txt
+# requirements/production.txt (and base.txt, which it includes) is all the image installs.
+requirements/development.txt
+requirements/staging.txt
 
 # Python
 **/__pycache__
@@ -36,5 +39,9 @@ db.sqlite3
 staticfiles
 theme/static
 
-# Not needed at runtime
-app/tests
+# Not needed at runtime: the tests (every app's and config/tests), uploads, the
+# translation sources (compiled .mo files are kept).
+**/tests
+media
+locale/**/*.po
+locale/**/*.pot

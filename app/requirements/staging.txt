@@ -1,0 +1,3 @@
+# Images are built once and promoted from one environment to the next, so staging
+# runs exactly what production runs and its requirements must not differ.
+-r production.txt

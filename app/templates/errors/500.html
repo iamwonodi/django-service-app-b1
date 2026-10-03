@@ -1,0 +1,17 @@
+{% load tailwind_tags %}
+<!DOCTYPE html>
+{# Standalone on purpose: it is rendered when something is already broken, so it extends nothing that could break again (the layout reads the user and the session). #}
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Something went wrong</title>
+    {% tailwind_css %}
+  </head>
+  <body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center">
+    <div class="max-w-md text-center px-4">
+      <h1 class="text-4xl font-bold mb-4 text-purple-400">500</h1>
+      <p class="text-gray-300">Something went wrong on our side. Please try again in a moment.</p>
+    </div>
+  </body>
+</html>

@@ -24,6 +24,12 @@ The tag's own commit is checked out, so the compose file and `.env` deployed are
 
 **No secret value passes through CI.** `.env` holds `__FROM_SECRET__` references; the host resolves them from Secrets Manager just before the container starts, into a scratch file it deletes at once.
 
+## What the image runs
+
+The image is built once per release and promoted from one environment to the next, so every environment runs the same code. The Dockerfile sets `DJANGO_SETTINGS_MODULE=config.settings.production`, which `docker exec ... python manage.py` therefore also uses, and installs only `app/requirements/production.txt`. What differs between environments is the variables in `.env` and the secrets it references. `config.settings.production` refuses to start with `DJANGO_DEBUG=true`, and a missing `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS` or database variable stops it with a message naming the cause.
+
+A service that needs a staging-only difference selects `config.settings.staging` (production plus room for the difference) with `DJANGO_SETTINGS_MODULE`.
+
 ## Shared fleet and dedicated hosts
 
 The platform decides, per environment, and the service config says which. The deploy steps are identical; only where the files go and which hosts are told to redeploy differ:
@@ -82,6 +88,7 @@ scripts/fetch-role-arn.sh --core OWNER/CORE-REPOSITORY --environment development
 | `has not been deployed successfully to <lower>` | Deploy the tag to the environment below first |
 | A tag was pushed but nothing was built | `RELEASE_TOKEN` is missing (the tag was pushed with the default token) |
 | A staging or production deploy is refused | Check `.github/environments.json`: it must list the environment |
+| The container exits at start naming `DJANGO_DEBUG` | `DJANGO_DEBUG=true` is set in `.env`; production never runs with DEBUG on |
 
 ## Not built yet
 

@@ -113,5 +113,5 @@ tfplan-destroy
 # "static" is ignored globally for collectstatic output, which also swallowed
 # source files that must be tracked. theme/static (the compiled Tailwind CSS) stays
 # ignored: the Docker build produces it.
-!app/polls/static/
-!app/polls/static/**
+!app/apps/*/static/
+!app/apps/*/static/**

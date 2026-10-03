@@ -1,0 +1,5 @@
+# What the production image installs, and so what runs in every environment: the
+# image is built once and promoted by tag.
+-r base.txt
+
+gunicorn==26.2.0

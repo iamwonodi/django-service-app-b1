@@ -1,0 +1,19 @@
+"""URL configuration."""
+
+from django.conf import settings
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("polls/", include("apps.polls.urls")),
+    path("accounts/", include("apps.users.urls")),
+    path("admin/", admin.site.urls),
+]
+
+handler404 = "apps.core.views.not_found"
+handler500 = "apps.core.views.server_error"
+
+# Development-only live reload. Mounted only when its app is installed, which
+# development.py does under DEBUG, so the endpoint does not exist in production.
+if "django_browser_reload" in settings.INSTALLED_APPS:
+    urlpatterns += [path("__reload__/", include("django_browser_reload.urls"))]

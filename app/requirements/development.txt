@@ -1,0 +1,11 @@
+# Local development and CI's second test run. Not installed in the image.
+-r base.txt
+
+# Reloads the browser when a template or stylesheet changes. Loaded by
+# config/settings/development.py only, and only if installed.
+django-browser-reload==1.21.0
+
+# Test data factories (apps/*/tests/factories.py). Faker is factory-boy's
+# dependency, pinned like every other transitive package here.
+factory-boy==3.3.3
+Faker==40.40.0

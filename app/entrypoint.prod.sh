@@ -20,4 +20,4 @@ if [ "${DJANGO_RUN_MIGRATIONS:-true}" = "true" ]; then
   python migrate.py
 fi
 
-exec gunicorn --config gunicorn.conf.py app.wsgi:application
+exec gunicorn --config gunicorn.conf.py config.wsgi:application
